@@ -13,6 +13,8 @@ import (
 	//"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -45,7 +47,7 @@ func main() {
 	root := "/home/isaiah/codes/go/go/src/pkg/"
 	pkgs, err := doc.GetLocalDoc(root)
 	for _, pkg := range pkgs {
-                fmt.Println(pkg.ImportPath)
+		fmt.Println(pkg.ImportPath)
 		store(pkg, pg)
 	}
 }
@@ -54,15 +56,15 @@ func store(pkg *doc.Package, pg *sql.DB) {
 	version := "1.1"
 	nsSql, err := pg.Prepare("insert into namespaces (name, doc, version, library_id) values ($1, $2, " + version + ", 2) RETURNING id")
 	check(err)
-	funSql, err := pg.Prepare("insert into functions (name, doc, arglists_comp, version, url_friendly_name, functional_id, functional_type, shortdoc) values ($1, $2, $3, " + version + ", $4, $5, $6, $7) RETURNING id")
+	funSql, err := pg.Prepare("insert into functions (name, doc, arglists_comp, version, url_friendly_name, functional_id, functional_type, shortdoc, source, file, line) values ($1, $2, $3, " + version + ", $4, $5, $6, $7, $8, $9, $10) RETURNING id")
 	check(err)
 	typeSql, err := pg.Prepare("insert into type_classes (name, doc, arglists_comp, type, namespace_id, version, created_at, updated_at, shortdoc) values ($1, $2, $3, 'StructType', $4, " + version + ", $5, $6, $7) RETURNING id")
 	check(err)
 	exampleSql, err := pg.Prepare("INSERT INTO examples (name, body, doc, output, examplable_id, examplable_type) VALUES ($1, $2, $3, $4, $5, $6)")
 	check(err)
-        rootPath := "/gopkg/" + version
+	rootPath := "/gopkg/" + version
 	var nsId int
-        pkgPath := pkg.ImportPath
+	pkgPath := pkg.ImportPath
 	err = nsSql.QueryRow(pkgPath, comment(pkg.Doc)).Scan(&nsId)
 	if err != nil {
 		panic(err)
@@ -70,8 +72,8 @@ func store(pkg *doc.Package, pg *sql.DB) {
 	now := time.Now()
 
 	for _, fun := range pkg.Funcs {
-                var funId int
-                err = funSql.QueryRow(fun.Name, comment(fun.Doc), codeFn(rootPath, pkgPath, fun.Decl), fun.Name, nsId, "Namespace", fun.Decl.Text).Scan(&funId)
+		var funId int
+		err = funSql.QueryRow(fun.Name, comment(fun.Doc), codeFn(rootPath, pkgPath, fun.Decl), fun.Name, nsId, "Namespace", fun.Decl.Text, sanatize(fun.Source), fun.FileName, strconv.Itoa(fun.Line)).Scan(&funId)
 		if err != nil {
 			panic(err)
 		}
@@ -86,8 +88,8 @@ func store(pkg *doc.Package, pg *sql.DB) {
 		err = typeSql.QueryRow(t.Name, comment(t.Doc), codeFn(rootPath, pkgPath, t.Decl), nsId, now, now, t.Decl.Text).Scan(&id)
 		check(err)
 		for _, fun := range t.Funcs {
-                        var funId int
-			err = funSql.QueryRow(fun.Name, comment(fun.Doc), codeFn(rootPath, pkgPath, fun.Decl), fun.Name, id, "TypeClass", fun.Decl.Text).Scan(&funId)
+			var funId int
+			err = funSql.QueryRow(fun.Name, comment(fun.Doc), codeFn(rootPath, pkgPath, fun.Decl), fun.Name, id, "TypeClass", fun.Decl.Text, sanatize(fun.Source), fun.FileName, strconv.Itoa(fun.Line)).Scan(&funId)
 			if err != nil {
 				panic(err)
 			}
@@ -99,8 +101,8 @@ func store(pkg *doc.Package, pg *sql.DB) {
 		}
 
 		for _, fun := range t.Methods {
-                        var funId int
-			err = funSql.QueryRow(fun.Name, comment(fun.Doc), codeFn(rootPath, pkgPath, fun.Decl), fun.Name, id, "TypeClass", fun.Decl.Text).Scan(&funId)
+			var funId int
+			err = funSql.QueryRow(fun.Name, comment(fun.Doc), codeFn(rootPath, pkgPath, fun.Decl), fun.Name, id, "TypeClass", fun.Decl.Text, sanatize(fun.Source), fun.FileName, strconv.Itoa(fun.Line)).Scan(&funId)
 			if err != nil {
 				panic(err)
 			}
@@ -171,8 +173,8 @@ func codeFn(rootPath string, pkg string, c doc.Code) string {
 			} else if p != "" {
 				p = rootPath + "/" + p
 			} else {
-                                p = rootPath + "/" + pkg
-                        }
+				p = rootPath + "/" + pkg
+			}
 			n := src[a.Pos:a.End]
 			n = n[bytes.LastIndex(n, period)+1:]
 			buf.WriteString(`<a href="`)
@@ -207,3 +209,7 @@ func escapePath(s string) string {
 }
 
 var period = []byte{'.'}
+
+func sanatize(s []byte) string {
+    return strings.Replace(string(s), string(0x00), "", -1)
+}

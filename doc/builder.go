@@ -15,6 +15,7 @@
 package doc
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"go/ast"
@@ -159,6 +160,22 @@ func (b *builder) printNode(node interface{}) string {
 	return string(b.buf)
 }
 
+func (b *builder) printSource(decl *ast.FuncDecl) ([]byte, string, int) {
+	start := b.fset.Position(decl.Pos())
+	end := b.fset.Position(decl.End())
+	src := b.srcs[start.Filename]
+	reader := bytes.NewReader(src.data)
+	reader.Seek(int64(start.Offset), 0)
+	lineReader := bufio.NewReader(reader)
+	fl := make([]byte, 40, 400)
+	lineNum := end.Line - start.Line
+	for i := 0; i <= lineNum; i++ {
+		line, _ := lineReader.ReadBytes('\n')
+		fl = append(fl, line...)
+	}
+	return fl, start.Filename, start.Line
+}
+
 func (b *builder) printPos(pos token.Pos) string {
 	position := b.fset.Position(pos)
 	src := b.srcs[position.Filename]
@@ -288,6 +305,9 @@ type Func struct {
 	Name     string
 	Recv     string
 	Examples []*Example
+	Source   []byte
+    Line     int
+    FileName string
 }
 
 func (b *builder) funcs(fdocs []*doc.Func) []*Func {
@@ -302,6 +322,11 @@ func (b *builder) funcs(fdocs []*doc.Func) []*Func {
 		default:
 			exampleName = d.Recv + "_" + d.Name
 		}
+        sourceCode, filename, line := b.printSource(d.Decl)
+        //sourceCode = strconv.Quote(sourceCode)
+        //if err != nil {
+        //        panic(err)
+        //}
 		result = append(result, &Func{
 			Decl:     b.printDecl(d.Decl),
 			URL:      b.printPos(d.Decl.Pos()),
@@ -309,6 +334,9 @@ func (b *builder) funcs(fdocs []*doc.Func) []*Func {
 			Name:     d.Name,
 			Recv:     d.Recv,
 			Examples: b.getExamples(exampleName),
+            Source:   sourceCode,
+            FileName: filename,
+            Line:     line,
 		})
 	}
 	return result
