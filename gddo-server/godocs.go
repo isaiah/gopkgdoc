@@ -33,7 +33,7 @@ func timeoutDial(network, addr string) (net.Conn, error) {
 }
 
 func main() {
-	pg, err := sql.Open("postgres", "user=isaiah dbname=clojuredocs_development sslmode=disable")
+	pg, err := sql.Open("postgres", "user=isaiah dbname=godock_dev sslmode=disable")
 	defer pg.Close()
 	if err != nil {
 		panic(err)
@@ -130,8 +130,6 @@ var (
 	pre               = []byte("<pre")
 	shBrush           = []byte("<pre class=\"brush: go\"")
 	stopLink          = make(map[string]string)
-	linkInCode        = regexp.MustCompile(`(<pre(?:.*?(?:\n))*.*?)<a\s+href="(?:.*?)">(.*?)</a>((?:.*?(?:\n)?.*?)*?</pre>)`)
-	linkInCodeReplace = []byte(`$1$2$3`)
 )
 
 func comment(v string) string {
@@ -140,7 +138,6 @@ func comment(v string) string {
 	p := buf.Bytes()
 	p = bytes.Replace(p, h3Open, h4Open, -1)
 	p = bytes.Replace(p, h3Close, h4Close, -1)
-	p = bytes.Replace(p, pre, shBrush, -1)
 	p = rfcRE.ReplaceAll(p, rfcReplace)
 	// rollback the links in code
 	//p = linkInCode.ReplaceAll(p, linkInCodeReplace)
