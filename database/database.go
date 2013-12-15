@@ -714,7 +714,6 @@ func (db *Database) Query(q string) ([]Package, error) {
 
 type PackageInfo struct {
 	PDoc  *doc.Package
-	Pkgs  []Package
 	Score float64
 	Kind  string
 	Size  int
@@ -725,8 +724,11 @@ func (db *Database) Do(f func(*PackageInfo) error) error {
 	c := db.Pool.Get()
 	defer c.Close()
 	cursor := 0
+	c.Send("SCAN", cursor, "MATCH", "pkg:*")
+	c.Flush()
 	for {
-		values, err := redis.Values(c.Do("SCAN", cursor, "MATCH", "pkg:*"))
+		// Recieve previous SCAN.
+		values, err := redis.Values(c.Receive())
 		if err != nil {
 			return err
 		}
@@ -738,7 +740,12 @@ func (db *Database) Do(f func(*PackageInfo) error) error {
 			break
 		}
 		for _, key := range keys {
-			values, err := redis.Values(c.Do("HMGET", key, "gob", "score", "kind", "path", "terms", "synopis"))
+			c.Send("HMGET", key, "gob", "score", "kind", "path", "terms", "synopis")
+		}
+		c.Send("SCAN", cursor, "MATCH", "pkg:*")
+		c.Flush()
+		for _ = range keys {
+			values, err := redis.Values(c.Receive())
 			if err != nil {
 				return err
 			}
@@ -768,10 +775,6 @@ func (db *Database) Do(f func(*PackageInfo) error) error {
 
 			if err := gob.NewDecoder(bytes.NewReader(p)).Decode(&pi.PDoc); err != nil {
 				return fmt.Errorf("gob decoding %s: %v", path, err)
-			}
-			pi.Pkgs, err = db.getSubdirs(c, pi.PDoc.ImportPath, pi.PDoc)
-			if err != nil {
-				return fmt.Errorf("get subdirs %s: %v", path, err)
 			}
 			if err := f(&pi); err != nil {
 				return fmt.Errorf("func %s: %v", path, err)
