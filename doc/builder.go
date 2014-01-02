@@ -256,6 +256,9 @@ type Func struct {
 	Name     string
 	Recv     string
 	Examples []*Example
+	Source   []byte
+	FileName  string
+	Line     int
 }
 
 func (b *builder) funcs(fdocs []*doc.Func) []*Func {
@@ -270,6 +273,7 @@ func (b *builder) funcs(fdocs []*doc.Func) []*Func {
 		default:
 			exampleName = d.Recv + "_" + d.Name
 		}
+		sourceCode, fileName, line := b.printSource(d.Decl)
 		result = append(result, &Func{
 			Decl:     b.printDecl(d.Decl),
 			Pos:      b.position(d.Decl),
@@ -277,6 +281,9 @@ func (b *builder) funcs(fdocs []*doc.Func) []*Func {
 			Name:     d.Name,
 			Recv:     d.Recv,
 			Examples: b.getExamples(exampleName),
+			Source:   sourceCode,
+			FileName: fileName,
+			Line:     line,
 		})
 	}
 	return result

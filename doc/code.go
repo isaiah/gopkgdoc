@@ -7,6 +7,7 @@
 package doc
 
 import (
+	"bufio"
 	"bytes"
 	"go/ast"
 	"go/doc"
@@ -263,6 +264,23 @@ func (b *builder) position(n ast.Node) Pos {
 		}
 	}
 	return position
+}
+
+
+func (b *builder) printSource(decl *ast.FuncDecl) ([]byte, string, int) {
+	start := b.fset.Position(decl.Pos())
+	end := b.fset.Position(decl.End())
+	src := b.srcs[start.Filename]
+	reader := bytes.NewReader(src.data)
+	reader.Seek(int64(start.Offset), 0)
+	lineReader := bufio.NewReader(reader)
+	fl := make([]byte, 40, 400)
+	lineNum := end.Line - start.Line
+	for i := 0; i <= lineNum; i++ {
+		line, _ := lineReader.ReadBytes('\n')
+		fl = append(fl, line...)
+	}
+	return fl, start.Filename, start.Line
 }
 
 func (b *builder) printExample(e *doc.Example) (code Code, output string) {
